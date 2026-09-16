@@ -29,7 +29,18 @@ def create_order(db: Session, payload: OrderIn) -> Order:
     charge_payment(total_cents)
 
     for product, quantity, _ in reserved:
-        product.stock = product.stock - quantity
+        rows = (
+            db.query(Product)
+            .filter(Product.id == product.id, Product.stock >= quantity)
+            .update(
+                {Product.stock: Product.stock - quantity},
+                synchronize_session=False,
+            )
+        )
+        if rows != 1:
+            db.rollback()
+            raise OutOfStockError(product.name)
+        db.refresh(product)
 
     order = Order(total_cents=total_cents, coupon_code=payload.coupon_code)
     db.add(order)
